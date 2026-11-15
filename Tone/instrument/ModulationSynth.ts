@@ -15,6 +15,7 @@ import { Synth, SynthOptions } from "./Synth.js";
 import { AmplitudeEnvelope } from "../component/envelope/AmplitudeEnvelope.js";
 import { readOnly, RecursivePartial } from "../core/util/Interface.js";
 import { omitFromObject, optionsFromArguments } from "../core/util/Defaults.js";
+import { VoiceBus } from "./VoiceBus.js";
 
 export interface ModulationSynthOptions extends SynthOptions {
 	harmonicity: Positive;
@@ -79,12 +80,18 @@ export abstract class ModulationSynth<
 	 * amSynth.harmonicity.value = 0.5;
 	 * amSynth.triggerAttackRelease("C5", "4n");
 	 */
-	readonly harmonicity: Multiply;
+	readonly harmonicity: Multiply<"positive">;
 
 	/**
 	 * The node where the modulation happens
 	 */
 	protected _modulationNode: Gain;
+
+	/**
+	 * The bus which derives the modulator's frequency from the carrier's
+	 * frequency through the harmonicity.
+	 */
+	protected _voiceBus: VoiceBus;
 
 	constructor(options?: RecursivePartial<ModulationSynthOptions>);
 	constructor() {
@@ -113,20 +120,18 @@ export abstract class ModulationSynth<
 		this.modulation = this._modulator.oscillator;
 		this.modulationEnvelope = this._modulator.envelope;
 
-		this.frequency = new Signal({
+		this._voiceBus = new VoiceBus({
 			context: this.context,
-			units: "frequency",
+			detune: options.detune,
+			harmonicity: options.harmonicity,
 		});
-		this.detune = new Signal({
-			context: this.context,
-			value: options.detune,
-			units: "cents",
-		});
-		this.harmonicity = new Multiply({
-			context: this.context,
-			value: options.harmonicity,
-			minValue: 0,
-		});
+		this.frequency = this._voiceBus.frequency;
+		this.detune = this._voiceBus.detune;
+		this.harmonicity = this._voiceBus.harmonicity;
+
+		// the carrier is the first voice, the modulator is the second
+		this._voiceBus.connectVoices(this._carrier, this._modulator);
+
 		this._modulationNode = new Gain({
 			context: this.context,
 			gain: 0,
@@ -223,9 +228,7 @@ export abstract class ModulationSynth<
 		super.dispose();
 		this._carrier.dispose();
 		this._modulator.dispose();
-		this.frequency.dispose();
-		this.detune.dispose();
-		this.harmonicity.dispose();
+		this._voiceBus.dispose();
 		this._modulationNode.dispose();
 		return this;
 	}

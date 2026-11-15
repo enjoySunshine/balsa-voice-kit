@@ -4,7 +4,7 @@ import { Signal } from "../signal/Signal.js";
 import { readOnly, RecursivePartial } from "../core/util/Interface.js";
 import { LFO } from "../source/oscillator/LFO.js";
 import { Gain } from "../core/context/Gain.js";
-import { Multiply } from "../signal/Multiply.js";
+import { VoiceBus } from "./VoiceBus.js";
 import {
 	Frequency,
 	NormalRange,
@@ -82,6 +82,12 @@ export class DuoSynth extends Monophonic<DuoSynthOptions> {
 	 */
 	private _vibratoGain: Gain<"normalRange">;
 
+	/**
+	 * The bus which derives voice1's frequency from voice0's frequency
+	 * through the harmonicity.
+	 */
+	private _voiceBus: VoiceBus;
+
 	constructor(options?: RecursivePartial<DuoSynthOptions>);
 	constructor() {
 		const options = optionsFromArguments(DuoSynth.getDefaults(), arguments);
@@ -99,12 +105,6 @@ export class DuoSynth extends Monophonic<DuoSynthOptions> {
 			})
 		);
 
-		this.harmonicity = new Multiply({
-			context: this.context,
-			units: "positive",
-			value: options.harmonicity,
-		});
-
 		this._vibrato = new LFO({
 			frequency: options.vibratoRate,
 			context: this.context,
@@ -121,25 +121,22 @@ export class DuoSynth extends Monophonic<DuoSynthOptions> {
 		});
 		this.vibratoAmount = this._vibratoGain.gain;
 
-		this.frequency = new Signal({
+		this._voiceBus = new VoiceBus({
 			context: this.context,
-			units: "frequency",
-			value: 440,
+			detune: options.detune,
+			frequency: 440,
+			harmonicity: options.harmonicity,
 		});
-		this.detune = new Signal({
-			context: this.context,
-			units: "cents",
-			value: options.detune,
-		});
+		this.frequency = this._voiceBus.frequency;
+		this.detune = this._voiceBus.detune;
+		this.harmonicity = this._voiceBus.harmonicity;
 
-		// control the two voices frequency
-		this.frequency.connect(this.voice0.frequency);
-		this.frequency.chain(this.harmonicity, this.voice1.frequency);
+		// voice0 is the first voice, voice1 is the second
+		this._voiceBus.connectVoices(this.voice0, this.voice1);
 
+		// the vibrato is only applied to the two voices of the duo
 		this._vibrato.connect(this._vibratoGain);
 		this._vibratoGain.fan(this.voice0.detune, this.voice1.detune);
-
-		this.detune.fan(this.voice0.detune, this.voice1.detune);
 
 		this.voice0.connect(this.output);
 		this.voice1.connect(this.output);
@@ -233,12 +230,10 @@ export class DuoSynth extends Monophonic<DuoSynthOptions> {
 		super.dispose();
 		this.voice0.dispose();
 		this.voice1.dispose();
-		this.frequency.dispose();
-		this.detune.dispose();
+		this._voiceBus.dispose();
 		this._vibrato.dispose();
 		this.vibratoRate.dispose();
 		this._vibratoGain.dispose();
-		this.harmonicity.dispose();
 		return this;
 	}
 }

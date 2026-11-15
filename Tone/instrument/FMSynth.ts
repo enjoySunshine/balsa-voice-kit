@@ -41,11 +41,8 @@ export class FMSynth extends ModulationSynth<FMSynthOptions> {
 			value: options.modulationIndex,
 		});
 
-		// control the two voices frequency
-		this.frequency.connect(this._carrier.frequency);
-		this.frequency.chain(this.harmonicity, this._modulator.frequency);
+		// the two voices' frequency and detune are wired up by the voice bus
 		this.frequency.chain(this.modulationIndex, this._modulationNode);
-		this.detune.fan(this._carrier.detune, this._modulator.detune);
 		this._modulator.connect(this._modulationNode.gain);
 		this._modulationNode.connect(this._carrier.frequency);
 		this._carrier.connect(this.output);

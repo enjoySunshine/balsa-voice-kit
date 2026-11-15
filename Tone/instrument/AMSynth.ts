@@ -34,10 +34,7 @@ export class AMSynth extends ModulationSynth<AMSynthOptions> {
 			context: this.context,
 		});
 
-		// control the two voices frequency
-		this.frequency.connect(this._carrier.frequency);
-		this.frequency.chain(this.harmonicity, this._modulator.frequency);
-		this.detune.fan(this._carrier.detune, this._modulator.detune);
+		// the two voices' frequency and detune are wired up by the voice bus
 		this._modulator.chain(this._modulationScale, this._modulationNode.gain);
 		this._carrier.chain(this._modulationNode, this.output);
 	}
